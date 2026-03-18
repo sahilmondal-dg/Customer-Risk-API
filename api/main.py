@@ -1,8 +1,9 @@
 import hmac
 import os
+import re
 import sys
 
-from fastapi import FastAPI, Header
+from fastapi import Depends, FastAPI, Header
 from fastapi.responses import JSONResponse
 
 # INV-17: loaded from environment at module startup; a restart re-reads the value
@@ -34,7 +35,7 @@ async def _auth_error_handler(request, exc):
     )
 
 
-# INV-05, INV-16: header-only, timing-safe comparison — not wired to any route yet
+# INV-05, INV-16: header-only, timing-safe comparison
 async def verify_api_key(x_api_key: str = Header(None)):
     if not x_api_key:
         raise _AuthError()
@@ -46,3 +47,40 @@ async def verify_api_key(x_api_key: str = Header(None)):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+_CUSTOMER_ID_RE = re.compile(r"^CUST-\d{4}$")
+_CUSTOMER_ID_MAX_LEN = 50
+
+_INTERNAL_ERROR = JSONResponse(
+    status_code=500,
+    content={"code": "INTERNAL_ERROR", "message": "An internal error occurred"},
+)
+
+# INV-02, INV-04, INV-05, INV-07, INV-11
+@app.get("/api/customer/{customer_id}", dependencies=[Depends(verify_api_key)])
+async def get_customer_endpoint(customer_id: str):
+    from db import CustomerNotFoundError, get_customer
+
+    # INV-11: length check before pattern match, both before any DB interaction
+    if len(customer_id) > _CUSTOMER_ID_MAX_LEN:
+        return JSONResponse(
+            status_code=400,
+            content={"code": "INTERNAL_ERROR", "message": "An internal error occurred"},
+        )
+    if not _CUSTOMER_ID_RE.match(customer_id):
+        return JSONResponse(
+            status_code=400,
+            content={"code": "INTERNAL_ERROR", "message": "An internal error occurred"},
+        )
+
+    try:
+        result = get_customer(customer_id)
+        return JSONResponse(status_code=200, content=result)
+    except CustomerNotFoundError:
+        return JSONResponse(
+            status_code=404,
+            content={"code": "NOT_FOUND", "message": "Customer not found"},
+        )
+    except Exception:
+        return _INTERNAL_ERROR
