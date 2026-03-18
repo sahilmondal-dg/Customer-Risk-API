@@ -34,4 +34,3 @@ services:
 
 networks:
   app-net:
-    internal: true
