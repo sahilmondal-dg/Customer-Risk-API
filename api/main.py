@@ -2,14 +2,18 @@ import hmac
 import os
 import re
 import sys
+from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header
-from fastapi.responses import JSONResponse
+import psycopg2.errors
+from fastapi import Depends, FastAPI, Header, Query
+from fastapi.responses import HTMLResponse, JSONResponse
 
 # INV-17: loaded from environment at module startup; a restart re-reads the value
 API_KEY = os.environ["API_KEY"]
 
 app = FastAPI()
+
+_UI_INDEX = Path(__file__).parent / "ui" / "index.html"
 
 
 @app.on_event("startup")
@@ -84,3 +88,47 @@ async def get_customer_endpoint(customer_id: str):
         )
     except Exception:
         return _INTERNAL_ERROR
+
+
+# INV-19: served by the FastAPI container — no separate server
+@app.get("/")
+async def ui_index():
+    return HTMLResponse(content=_UI_INDEX.read_text())
+
+
+# INV-18: no auth check, no API_KEY reference, calls get_customer directly
+# INV-22: QueryCanceled mapped to 503
+@app.get("/lookup")
+async def lookup(customer_id: str = Query(default="")):
+    from db import CustomerNotFoundError, get_customer
+
+    # INV-11: same validation as /api/customer, before any DB interaction
+    if len(customer_id) > _CUSTOMER_ID_MAX_LEN:
+        return JSONResponse(
+            status_code=400,
+            content={"code": "INTERNAL_ERROR", "message": "An internal error occurred"},
+        )
+    if not _CUSTOMER_ID_RE.match(customer_id):
+        return JSONResponse(
+            status_code=400,
+            content={"code": "INTERNAL_ERROR", "message": "An internal error occurred"},
+        )
+
+    try:
+        result = get_customer(customer_id)
+        return JSONResponse(status_code=200, content=result)
+    except CustomerNotFoundError:
+        return JSONResponse(
+            status_code=404,
+            content={"code": "NOT_FOUND", "message": "Customer not found"},
+        )
+    except psycopg2.errors.QueryCanceled:
+        return JSONResponse(
+            status_code=503,
+            content={"code": "INTERNAL_ERROR", "message": "An internal error occurred"},
+        )
+    except Exception:
+        return JSONResponse(
+            status_code=500,
+            content={"code": "INTERNAL_ERROR", "message": "An internal error occurred"},
+        )

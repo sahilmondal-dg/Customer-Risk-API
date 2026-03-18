@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Customer Risk Lookup</title>
+  <style>
+    body { font-family: sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+    label { display: block; margin-bottom: 0.25rem; font-weight: bold; }
+    input { padding: 0.4rem; font-size: 1rem; width: 16rem; }
+    button { padding: 0.4rem 1rem; font-size: 1rem; margin-left: 0.5rem; cursor: pointer; }
+    #result { margin-top: 1.5rem; }
+    dl { border: 1px solid #ccc; padding: 1rem; border-radius: 4px; }
+    dt { font-weight: bold; margin-top: 0.75rem; }
+    dd { margin: 0.25rem 0 0 1rem; }
+    ul { margin: 0.25rem 0; padding-left: 1.25rem; }
+    .error { color: #b00; background: #fff3f3; border: 1px solid #faa; padding: 0.75rem; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Customer Risk Lookup</h1>
+  <label for="customer-id">Customer ID</label>
+  <input type="text" id="customer-id" placeholder="CUST-0001">
+  <button id="lookup-btn">Look Up</button>
+  <div id="result"></div>
+
+  <script>
+    document.getElementById('lookup-btn').addEventListener('click', async function () {
+      var customerId = document.getElementById('customer-id').value;
+      var resultDiv = document.getElementById('result');
+
+      while (resultDiv.firstChild) {
+        resultDiv.removeChild(resultDiv.firstChild);
+      }
+
+      var response, data;
+      try {
+        response = await fetch('/lookup?customer_id=' + encodeURIComponent(customerId));
+        data = await response.json();
+      } catch (err) {
+        var errDiv = document.createElement('div');
+        errDiv.className = 'error';
+        errDiv.textContent = 'Request failed: ' + err.message;
+        resultDiv.appendChild(errDiv);
+        return;
+      }
+
+      if (!response.ok) {
+        // Display error body without modification (INV-09)
+        var errDiv = document.createElement('div');
+        errDiv.className = 'error';
+        errDiv.textContent = JSON.stringify(data);
+        resultDiv.appendChild(errDiv);
+        return;
+      }
+
+      // Render all fields directly from API response — no transformation (INV-09)
+      var dl = document.createElement('dl');
+
+      var dtId = document.createElement('dt');
+      dtId.textContent = 'customer_id';
+      var ddId = document.createElement('dd');
+      ddId.textContent = data.customer_id;
+      dl.appendChild(dtId);
+      dl.appendChild(ddId);
+
+      var dtTier = document.createElement('dt');
+      dtTier.textContent = 'risk_tier';
+      var ddTier = document.createElement('dd');
+      ddTier.textContent = data.risk_tier;
+      dl.appendChild(dtTier);
+      dl.appendChild(ddTier);
+
+      var dtFactors = document.createElement('dt');
+      dtFactors.textContent = 'risk_factors';
+      var ddFactors = document.createElement('dd');
+      if (data.risk_factors.length === 0) {
+        ddFactors.textContent = '(none)';
+      } else {
+        var ul = document.createElement('ul');
+        data.risk_factors.forEach(function (f) {
+          var li = document.createElement('li');
+          li.textContent = f.code + ': ' + f.description;
+          ul.appendChild(li);
+        });
+        ddFactors.appendChild(ul);
+      }
+      dl.appendChild(dtFactors);
+      dl.appendChild(ddFactors);
+
+      resultDiv.appendChild(dl);
+    });
+  </script>
+</body>
+</html>
