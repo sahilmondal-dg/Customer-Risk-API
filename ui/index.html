@@ -45,10 +45,16 @@
       }
 
       if (!response.ok) {
-        // Display error body without modification (INV-09)
+        var friendlyMessages = {
+          400: 'Invalid customer ID format. Expected format: CUST-XXXX.',
+          404: 'Customer not found.',
+          401: 'Unauthorised.',
+          503: 'Service not available at the moment. Please try again shortly.',
+          500: 'An unexpected error occurred. Please try again later.'
+        };
         var errDiv = document.createElement('div');
         errDiv.className = 'error';
-        errDiv.textContent = JSON.stringify(data);
+        errDiv.textContent = friendlyMessages[response.status] || 'An unexpected error occurred.';
         resultDiv.appendChild(errDiv);
         return;
       }
